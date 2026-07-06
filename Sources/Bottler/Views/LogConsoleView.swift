@@ -20,7 +20,7 @@ struct LogConsoleView: View {
                 .padding(8)
             }
             .background(Color(nsColor: .textBackgroundColor))
-            .onChange(of: logStore.lines.count) { _, _ in
+            .onChange(of: logStore.lines.count) { _ in
                 withAnimation {
                     proxy.scrollTo(logStore.lines.count - 1, anchor: .bottom)
                 }
