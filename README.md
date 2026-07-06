@@ -19,7 +19,37 @@ brew install --cask wine-stable
 brew install winetricks
 ```
 
-## Building a double-clickable .app (drag to Applications)
+## Publishing to GitHub (with automatic Releases)
+
+This project includes a GitHub Actions workflow (`.github/workflows/release.yml`)
+that builds `Bottler.app` on a real macOS runner and attaches it to a GitHub
+Release automatically whenever you push a version tag. You never need to
+build it locally again after this is set up.
+
+**One-time setup:**
+1. Create a new **empty** repository on GitHub (no README/license/gitignore
+   — this project already has them): https://github.com/new
+2. In this project folder, point it at your new repo and push:
+   ```bash
+   git remote add origin https://github.com/<your-username>/<your-repo>.git
+   git push -u origin main
+   ```
+   (This folder is already a git repo with one commit, so that's all you need.
+   If prompted, update the commit author first: `git commit --amend --author="Your Name <you@example.com>"`.)
+
+**Every time you want a new release:**
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+Pushing the tag triggers the workflow. Watch it run under your repo's
+**Actions** tab (takes a few minutes); when it finishes, `Bottler.app`
+(zipped) appears under your repo's **Releases** tab, ready to download.
+
+To ship an update later: commit your changes, bump the tag (e.g. `v1.0.1`),
+and push the new tag — a new release is created automatically.
+
+## Building locally instead (optional)
 
 Requires only the **Xcode Command Line Tools**, not full Xcode:
 ```bash
