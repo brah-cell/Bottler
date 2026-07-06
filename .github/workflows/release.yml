@@ -18,6 +18,8 @@ on:
 jobs:
   build-and-release:
     runs-on: macos-14
+    permissions:
+      contents: write
 
     steps:
       - name: Check out repository
