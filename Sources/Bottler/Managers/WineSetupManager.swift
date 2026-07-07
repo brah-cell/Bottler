@@ -30,12 +30,23 @@ enum WineSetupManager {
     /// in Info.plist). We await the result so a denied/failed automation
     /// surfaces as a real error instead of silently doing nothing.
     static func openTerminalForHomebrewInstall() async throws {
-        let script = "tell application \"Terminal\" to do script \"\(homebrewInstallCommand)\""
+        // The install command itself contains double quotes, which must be
+        // escaped before embedding it inside the AppleScript string literal
+        // below — otherwise the generated AppleScript is malformed.
+        let escapedCommand = homebrewInstallCommand
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = "tell application \"Terminal\" to do script \"\(escapedCommand)\""
+
         var output = ""
-        try await Shell.run("/usr/bin/osascript", arguments: ["-e", script]) { line in
-            output += line + "\n"
+        do {
+            try await Shell.run("/usr/bin/osascript", arguments: ["-e", script]) { line in
+                output += line + "\n"
+            }
+        } catch {
+            let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw SetupError.terminalAutomationFailed(detail.isEmpty ? error.localizedDescription : detail)
         }
-        _ = output // available for debugging if needed
     }
 
     /// Installs Wine (via the `wine-stable` cask) and winetricks using the
@@ -56,11 +67,14 @@ enum WineSetupManager {
 
     enum SetupError: Error, LocalizedError {
         case homebrewNotFound
+        case terminalAutomationFailed(String)
 
         var errorDescription: String? {
             switch self {
             case .homebrewNotFound:
                 return "Homebrew isn't installed. Install it first, then try again."
+            case .terminalAutomationFailed(let detail):
+                return "Couldn't open Terminal: \(detail)"
             }
         }
     }
