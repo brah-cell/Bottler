@@ -39,7 +39,7 @@ final class BottleManager: ObservableObject {
         let safeDirName = name.replacingOccurrences(of: "/", with: "-")
         let prefixURL = Persistence.bottlesRootDirectory.appendingPathComponent(safeDirName)
 
-        var bottle = Bottle(
+        let bottle = Bottle(
             name: name,
             prefixPath: prefixURL.path,
             wineBinaryPath: wineInstallation.binaryPath,
