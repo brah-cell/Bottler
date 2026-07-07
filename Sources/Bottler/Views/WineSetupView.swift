@@ -1,16 +1,17 @@
 import SwiftUI
 
 /// Shown whenever no Wine installation is detected — either as the app's
-/// empty state, or inside the New Bottle sheet. Offers to install Wine +
-/// winetricks automatically via Homebrew, streaming progress, instead of
-/// sending the user to Terminal.
+/// empty state, or inside the New Bottle sheet. One button runs the entire
+/// setup (Homebrew, Rosetta if needed, Wine, winetricks) as a single
+/// Terminal session, then this view polls automatically in the background
+/// so the person doesn't have to remember to come back and click Refresh.
 struct WineSetupView: View {
     @EnvironmentObject var bottleManager: BottleManager
     var onFinished: () -> Void = {}
 
-    @State private var isInstalling = false
+    @State private var hasStartedSetup = false
     @State private var errorMessage: String?
-    @State private var showingLog = false
+    @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -25,94 +26,82 @@ struct WineSetupView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
+                .frame(maxWidth: 440)
 
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Text(errorMessage)
+                    .foregroundStyle(.red)
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
             }
 
-            if isInstalling {
+            if hasStartedSetup {
                 VStack(spacing: 10) {
                     ProgressView()
-                    Button("Show Progress Log") { showingLog = true }
+                    Text("Waiting for setup to finish in Terminal…")
                         .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button("I finished — Check Now") {
+                        checkNow()
+                    }
+                    .font(.callout)
                 }
-            } else if WineSetupManager.isHomebrewInstalled {
-                Button("Install Wine Automatically") {
-                    installWine()
+            } else {
+                Button("Set Up Wine Automatically") {
+                    startSetup()
                 }
                 .buttonStyle(.wineProminent)
-            } else {
-                VStack(spacing: 10) {
-                    Button("Install Homebrew First") {
-                        openHomebrewInstall()
-                    }
-                    .buttonStyle(.wineProminent)
-                    Text("Homebrew needs your password in Terminal, so we can't fully automate this step. Once it finishes, come back and click Refresh.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 380)
-                    Button("Refresh") {
-                        bottleManager.refreshWineInstallations()
-                        if !bottleManager.wineInstallations.isEmpty { onFinished() }
-                    }
-                }
             }
         }
         .padding(32)
-        .sheet(isPresented: $showingLog) {
-            VStack(alignment: .leading) {
-                Text("Installing Wine").font(.title2.weight(.semibold)).padding([.top, .horizontal])
-                LogConsoleView()
-                HStack {
-                    Spacer()
-                    Button("Close") { showingLog = false }
-                }
-                .padding()
-            }
-            .frame(width: 640, height: 420)
+        .onDisappear {
+            pollTask?.cancel()
         }
     }
 
     private var bodyText: String {
-        if WineSetupManager.isHomebrewInstalled {
-            return "Bottler didn't find Wine on this Mac. Click below and it'll install Wine and winetricks for you via Homebrew — no Terminal required."
+        if hasStartedSetup {
+            return "A Terminal window has opened and is installing everything Bottler needs. If it asks for your Mac password, type it in and press Return — you won't see characters appear as you type, that's normal."
         } else {
-            return "Bottler needs Wine, which is installed via Homebrew. Homebrew isn't on this Mac yet, so let's install that first."
+            return "Bottler didn't find Wine on this Mac. Click below and it'll open a Terminal window that installs Homebrew (if needed), Wine, and winetricks for you automatically, prompting for your password only if required."
         }
     }
 
-    private func installWine() {
-        isInstalling = true
+    private func startSetup() {
         errorMessage = nil
-        showingLog = true
-        LogStore.shared.clear()
         Task {
             do {
-                try await WineSetupManager.installWineAndWinetricks { line in
-                    Task { @MainActor in LogStore.shared.append(line) }
-                }
+                try await WineSetupManager.runSetupInTerminal()
+                hasStartedSetup = true
+                beginPolling()
+            } catch {
+                errorMessage = "\(error.localizedDescription) If macOS showed a permission prompt for Terminal, make sure to click Allow, then try again."
+            }
+        }
+    }
+
+    /// Polls every few seconds for Wine to appear, so the person doesn't
+    /// have to remember to come back and click a Refresh button manually.
+    private func beginPolling() {
+        pollTask?.cancel()
+        pollTask = Task {
+            for _ in 0..<200 { // roughly 10 minutes at 3s intervals, then give up quietly
+                if Task.isCancelled { return }
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 bottleManager.refreshWineInstallations()
-                isInstalling = false
                 if !bottleManager.wineInstallations.isEmpty {
                     onFinished()
+                    return
                 }
-            } catch {
-                errorMessage = error.localizedDescription
-                isInstalling = false
             }
         }
     }
 
-    private func openHomebrewInstall() {
-        errorMessage = nil
-        Task {
-            do {
-                try await WineSetupManager.openTerminalForHomebrewInstall()
-            } catch {
-                errorMessage = "Couldn't open Terminal automatically: \(error.localizedDescription). If macOS showed a permission prompt for Terminal, make sure to click Allow, then try again."
-            }
+    private func checkNow() {
+        bottleManager.refreshWineInstallations()
+        if !bottleManager.wineInstallations.isEmpty {
+            onFinished()
         }
     }
 }

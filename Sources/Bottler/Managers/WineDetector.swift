@@ -13,6 +13,7 @@ enum WineDetector {
         ("WineHQ Wine Stable.app", "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine"),
         ("WineHQ Wine Devel.app", "/Applications/Wine Devel.app/Contents/Resources/wine/bin/wine"),
         ("Wine (Kegworks) Staging.app", "/Applications/Wine Staging.app/Contents/Resources/wine/bin/wine"),
+        ("Wine Crossover.app", "/Applications/Wine Crossover.app/Contents/Resources/wine/bin/wine"),
     ]
 
     private static let candidateWinetricksPaths: [String] = [
