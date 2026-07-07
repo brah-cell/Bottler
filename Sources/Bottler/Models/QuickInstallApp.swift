@@ -27,7 +27,7 @@ enum QuickInstallCatalog {
         QuickInstallApp(
             name: "Steam",
             iconSystemName: "gamecontroller.fill",
-            directDownloadURL: "https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe",
+            directDownloadURL: "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe",
             installerFilename: "SteamSetup.exe",
             fallbackPageURL: "https://store.steampowered.com/about/",
             notes: "Steam already has a native Mac app — only install this Windows version if you need Windows-only games or anti-cheat that doesn't support the Mac client. Bottler applies Steam's known Wine prerequisites automatically first, to avoid the common freeze on first launch.",
