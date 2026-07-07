@@ -67,6 +67,21 @@ shows a "Let's set up Wine" screen with a single button:
    — Check Now"** button once Terminal shows it's done.
 5. When it's ready, you're set — go ahead and create your first bottle.
 
+## Installing Windows apps
+
+From a bottle's **Applications** tab:
+
+- **Install Application…** — pick any `.exe` or `.msi` you already have,
+  and Bottler installs it, then automatically detects and offers to
+  launch the program it just installed.
+- **Quick Install…** — a short list of popular Windows apps. Steam and
+  Discord download and install with one click (straight from their
+  official download links); others open the vendor's official download
+  page for you to grab manually, then install through the button above.
+  For apps known to need certain Wine components to run reliably (like
+  Steam), Bottler installs those automatically first, which avoids the
+  common freeze some of these apps hit on their very first launch.
+
 If a step doesn't behave as described — the setup button seems to do
 nothing, or an error appears — check whether macOS is showing a permission
 popup behind the main window (⌘+Tab to check for hidden dialogs), since the

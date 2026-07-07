@@ -13,4 +13,32 @@ extension String {
             .joined(separator: " ")
         return collapsed.isEmpty ? self : collapsed
     }
+
+    /// Splits a launch-arguments string into individual arguments,
+    /// respecting double-quoted sections so a value like
+    /// `--config "C:\Program Files\thing"` becomes two arguments, not five.
+    /// Simple by design (no escape-character support) — good enough for the
+    /// common "one quoted path" case without pulling in a full shell lexer.
+    func splitRespectingQuotes() -> [String] {
+        var result: [String] = []
+        var current = ""
+        var insideQuotes = false
+
+        for character in self {
+            if character == "\"" {
+                insideQuotes.toggle()
+            } else if character == " " && !insideQuotes {
+                if !current.isEmpty {
+                    result.append(current)
+                    current = ""
+                }
+            } else {
+                current.append(character)
+            }
+        }
+        if !current.isEmpty {
+            result.append(current)
+        }
+        return result
+    }
 }

@@ -15,6 +15,11 @@ struct QuickInstallApp: Identifiable, Hashable {
     let installerFilename: String?   // only meaningful when directDownloadURL is set
     let fallbackPageURL: String
     let notes: String?
+    /// winetricks components this app is known to need to install/run
+    /// reliably under Wine. Applied automatically before the installer
+    /// runs, so the person doesn't hit a hang or crash from a missing
+    /// prerequisite on first launch.
+    let recommendedWinetricksVerbs: [String]
 }
 
 enum QuickInstallCatalog {
@@ -25,7 +30,8 @@ enum QuickInstallCatalog {
             directDownloadURL: "https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe",
             installerFilename: "SteamSetup.exe",
             fallbackPageURL: "https://store.steampowered.com/about/",
-            notes: "First launch updates itself — this can take a few minutes under Wine."
+            notes: "Steam already has a native Mac app — only install this Windows version if you need Windows-only games or anti-cheat that doesn't support the Mac client. Bottler applies Steam's known Wine prerequisites automatically first, to avoid the common freeze on first launch.",
+            recommendedWinetricksVerbs: ["corefonts", "vcrun2019", "d3dx9", "gdiplus"]
         ),
         QuickInstallApp(
             name: "Discord",
@@ -33,7 +39,8 @@ enum QuickInstallCatalog {
             directDownloadURL: "https://discord.com/api/download?platform=win",
             installerFilename: "DiscordSetup.exe",
             fallbackPageURL: "https://discord.com/download",
-            notes: nil
+            notes: nil,
+            recommendedWinetricksVerbs: ["corefonts", "vcrun2019"]
         ),
         QuickInstallApp(
             name: "Epic Games Store",
@@ -41,7 +48,8 @@ enum QuickInstallCatalog {
             directDownloadURL: nil,
             installerFilename: nil,
             fallbackPageURL: "https://www.epicgames.com/store/download",
-            notes: "Opens Epic's page — install the download through Bottler afterward."
+            notes: "Opens Epic's page — install the download through Bottler afterward.",
+            recommendedWinetricksVerbs: ["corefonts", "vcrun2019", "d3dx9"]
         ),
         QuickInstallApp(
             name: "Battle.net",
@@ -49,7 +57,8 @@ enum QuickInstallCatalog {
             directDownloadURL: nil,
             installerFilename: nil,
             fallbackPageURL: "https://battle.net/download",
-            notes: "Opens Blizzard's page — install the download through Bottler afterward."
+            notes: "Opens Blizzard's page — install the download through Bottler afterward.",
+            recommendedWinetricksVerbs: ["corefonts", "vcrun2019", "d3dx9"]
         ),
         QuickInstallApp(
             name: "VLC Media Player",
@@ -57,7 +66,8 @@ enum QuickInstallCatalog {
             directDownloadURL: nil,
             installerFilename: nil,
             fallbackPageURL: "https://www.videolan.org/vlc/download-windows.html",
-            notes: "Opens VideoLAN's page — install the download through Bottler afterward."
+            notes: "Opens VideoLAN's page — install the download through Bottler afterward.",
+            recommendedWinetricksVerbs: []
         ),
         QuickInstallApp(
             name: "7-Zip",
@@ -65,7 +75,8 @@ enum QuickInstallCatalog {
             directDownloadURL: nil,
             installerFilename: nil,
             fallbackPageURL: "https://www.7-zip.org/download.html",
-            notes: "Opens 7-Zip's page — install the download through Bottler afterward."
+            notes: "Opens 7-Zip's page — install the download through Bottler afterward.",
+            recommendedWinetricksVerbs: []
         ),
         QuickInstallApp(
             name: "Notepad++",
@@ -73,7 +84,8 @@ enum QuickInstallCatalog {
             directDownloadURL: nil,
             installerFilename: nil,
             fallbackPageURL: "https://notepad-plus-plus.org/downloads/",
-            notes: "Opens Notepad++'s page — install the download through Bottler afterward."
+            notes: "Opens Notepad++'s page — install the download through Bottler afterward.",
+            recommendedWinetricksVerbs: []
         ),
     ]
 }

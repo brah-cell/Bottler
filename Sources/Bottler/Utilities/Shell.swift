@@ -59,8 +59,21 @@ enum Shell {
             drain(stderrPipe)
 
             process.terminationHandler = { proc in
+                // Stop future async callbacks first, then do one final
+                // synchronous read of anything still sitting in the pipe
+                // buffer — without this, the last chunk of output (e.g. a
+                // final "Done." line) can occasionally be dropped if the
+                // process exits before the readability handler fires for
+                // the last time.
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
+                for pipe in [stdoutPipe, stderrPipe] {
+                    let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
+                    if !remaining.isEmpty, let text = String(data: remaining, encoding: .utf8) {
+                        text.split(separator: "\n", omittingEmptySubsequences: true)
+                            .forEach { onOutput(String($0)) }
+                    }
+                }
                 if proc.terminationStatus == 0 {
                     continuation.resume(returning: proc.terminationStatus)
                 } else {

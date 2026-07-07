@@ -121,7 +121,7 @@ enum WineProcessManager {
             args.append(app.executablePath)
         }
         if !app.arguments.isEmpty {
-            args.append(contentsOf: app.arguments.split(separator: " ").map(String.init))
+            args.append(contentsOf: app.arguments.splitRespectingQuotes())
         }
 
         try Shell.launchDetached(bottle.wineBinaryPath, arguments: args, environment: env)

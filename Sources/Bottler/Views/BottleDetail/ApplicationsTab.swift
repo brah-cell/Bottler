@@ -121,8 +121,8 @@ struct ApplicationsTab: View {
             )
         }
         .sheet(isPresented: $showingQuickInstall) {
-            QuickInstallSheet { downloadedURL in
-                install(installerURL: downloadedURL)
+            QuickInstallSheet { downloadedURL, prerequisiteVerbs in
+                install(installerURL: downloadedURL, prerequisiteVerbs: prerequisiteVerbs)
             }
         }
         .sheet(isPresented: $showingLogSheet) {
@@ -212,7 +212,7 @@ struct ApplicationsTab: View {
         .card()
     }
 
-    private func install(installerURL: URL) {
+    private func install(installerURL: URL, prerequisiteVerbs: [String] = []) {
         showingLogSheet = true
         errorMessage = nil
         isInstalling = true
@@ -220,6 +220,30 @@ struct ApplicationsTab: View {
         pendingAppName = installerURL.deletingPathExtension().lastPathComponent.prettifiedAppName
 
         Task {
+            if !prerequisiteVerbs.isEmpty {
+                if let winetricksPath = bottleManager.wineInstallations
+                    .first(where: { $0.binaryPath == bottle.wineBinaryPath })?.winetricksPath
+                    ?? WineDetector.firstAvailableWinetricks() {
+                    LogStore.shared.append("Installing prerequisites this app needs (\(prerequisiteVerbs.joined(separator: ", ")))…")
+                    do {
+                        try await WinetricksManager.run(
+                            verbs: prerequisiteVerbs,
+                            in: bottle,
+                            winetricksPath: winetricksPath
+                        ) { line in
+                            Task { @MainActor in LogStore.shared.append(line) }
+                        }
+                    } catch {
+                        // Prerequisites are a best-effort head start, not a hard
+                        // requirement — log it and still attempt the install,
+                        // rather than blocking the person entirely.
+                        LogStore.shared.append("Couldn't install prerequisites automatically (\(error.localizedDescription)) — continuing with the install anyway.")
+                    }
+                } else {
+                    LogStore.shared.append("winetricks isn't installed, so prerequisites were skipped. Install it from the Winetricks tab, then reinstall this app if it doesn't run correctly.")
+                }
+            }
+
             let before = ExeDiffScanner.snapshot(root: bottle.driveCPath)
             do {
                 try await WineProcessManager.runInstaller(installerURL.path, in: bottle) { line in
