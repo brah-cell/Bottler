@@ -106,10 +106,13 @@ struct WineSetupView: View {
     }
 
     private func openHomebrewInstall() {
-        do {
-            try WineSetupManager.openTerminalForHomebrewInstall()
-        } catch {
-            errorMessage = error.localizedDescription
+        errorMessage = nil
+        Task {
+            do {
+                try await WineSetupManager.openTerminalForHomebrewInstall()
+            } catch {
+                errorMessage = "Couldn't open Terminal automatically: \(error.localizedDescription). If macOS showed a permission prompt for Terminal, make sure to click Allow, then try again."
+            }
         }
     }
 }

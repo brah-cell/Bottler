@@ -57,6 +57,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<PLIST
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Bottler opens Terminal to run the Homebrew installer on your behalf when setting up Wine.</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
 </dict>

@@ -24,9 +24,18 @@ enum WineSetupManager {
 
     /// Opens Terminal.app with the Homebrew install command pre-filled,
     /// since it requires an interactive password prompt we can't automate.
-    static func openTerminalForHomebrewInstall() throws {
+    /// Uses osascript to send Terminal an Apple Event — macOS will show a
+    /// one-time "Bottler wants access to control Terminal" permission
+    /// prompt the first time this runs (see NSAppleEventsUsageDescription
+    /// in Info.plist). We await the result so a denied/failed automation
+    /// surfaces as a real error instead of silently doing nothing.
+    static func openTerminalForHomebrewInstall() async throws {
         let script = "tell application \"Terminal\" to do script \"\(homebrewInstallCommand)\""
-        try Shell.launchDetached("/usr/bin/osascript", arguments: ["-e", script])
+        var output = ""
+        try await Shell.run("/usr/bin/osascript", arguments: ["-e", script]) { line in
+            output += line + "\n"
+        }
+        _ = output // available for debugging if needed
     }
 
     /// Installs Wine (via the `wine-stable` cask) and winetricks using the
