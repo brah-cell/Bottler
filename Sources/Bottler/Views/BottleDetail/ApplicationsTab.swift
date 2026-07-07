@@ -6,6 +6,7 @@ struct ApplicationsTab: View {
     let bottle: Bottle
 
     @State private var showingInstaller = false
+    @State private var showingQuickInstall = false
     @State private var showingLogSheet = false
     @State private var editingApp: BottleApp?
     @State private var editingAutoLaunch = false
@@ -51,6 +52,13 @@ struct ApplicationsTab: View {
                     Label(isInstalling ? "Installing…" : "Install Application…", systemImage: "arrow.down.circle.fill")
                 }
                 .buttonStyle(.wineProminent)
+                .disabled(isInstalling)
+
+                Button {
+                    showingQuickInstall = true
+                } label: {
+                    Label("Quick Install…", systemImage: "arrow.down.app.fill")
+                }
                 .disabled(isInstalling)
 
                 if isInstalling {
@@ -111,6 +119,11 @@ struct ApplicationsTab: View {
                     openEditor(for: "", suggestedName: pendingAppName, autoLaunch: false, note: nil)
                 }
             )
+        }
+        .sheet(isPresented: $showingQuickInstall) {
+            QuickInstallSheet { downloadedURL in
+                install(installerURL: downloadedURL)
+            }
         }
         .sheet(isPresented: $showingLogSheet) {
             VStack(alignment: .leading) {

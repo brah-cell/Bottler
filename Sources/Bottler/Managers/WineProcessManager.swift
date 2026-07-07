@@ -88,7 +88,15 @@ enum WineProcessManager {
         extraArguments: [String] = [],
         onOutput: @escaping (String) -> Void
     ) async throws {
-        var args = [installerPath]
+        var args: [String]
+        // Wine can't directly execute a .msi the way it does a .exe — it
+        // needs to be handed to msiexec explicitly, or the installer
+        // silently does nothing.
+        if (installerPath as NSString).pathExtension.lowercased() == "msi" {
+            args = ["msiexec", "/i", installerPath]
+        } else {
+            args = [installerPath]
+        }
         args.append(contentsOf: extraArguments)
         try await Shell.run(
             bottle.wineBinaryPath,

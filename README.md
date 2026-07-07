@@ -71,3 +71,28 @@ If a step doesn't behave as described — the setup button seems to do
 nothing, or an error appears — check whether macOS is showing a permission
 popup behind the main window (⌘+Tab to check for hidden dialogs), since the
 first run needs a one-time system permission grant for Terminal access.
+
+## Quick Install (Steam and other popular apps)
+
+From the **Applications** tab, click **Quick Install…** for one-click setup
+of popular Windows apps:
+
+- **Steam** and **Discord** download and install automatically — pick one,
+  and Bottler downloads the official installer and runs it in the current
+  bottle, same as the regular Install flow.
+- **Epic Games Store, Battle.net, VLC, 7-Zip, and Notepad++** open the
+  vendor's official download page instead of an auto-download. This is
+  intentional: Bottler won't guess at a hardcoded binary link for these
+  that could quietly go stale — download it once from the official page,
+  then use **Install Application…** in Bottler as normal.
+
+If an automatic download ever fails (a dead link, no internet, etc.),
+Bottler automatically falls back to opening that app's official page so
+you're never stuck.
+
+**Steam-specific tip:** its first launch under Wine can hang for a few
+minutes on "Updating Steam…" — this is a known Wine quirk, not a Bottler
+bug. If it seems stuck for 5+ minutes, use **Kill Wine Processes** on the
+Overview tab and launch it again; the second attempt usually finishes
+quickly since the update partially completed already.
+
