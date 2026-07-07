@@ -34,6 +34,7 @@ enum WinetricksManager {
         onOutput: @escaping (String) -> Void
     ) async throws {
         guard !verbs.isEmpty else { return }
+        await ensureDependenciesInstalled(onOutput: onOutput)
         try await Shell.run(
             winetricksPath,
             arguments: ["--unattended"] + verbs,
@@ -44,5 +45,28 @@ enum WinetricksManager {
             ],
             onOutput: onOutput
         )
+    }
+
+    /// winetricks relies on a couple of command-line tools — `cabextract`
+    /// and `7z` (from p7zip) — to unpack the font/runtime packages it
+    /// downloads. Neither ships with macOS, and `brew install winetricks`
+    /// doesn't pull them in automatically either, so without this,
+    /// winetricks silently prints "Cannot find cabextract" and skips the
+    /// component instead of installing it. These are plain Homebrew
+    /// formulae (not casks with a pkg installer), so installing them
+    /// doesn't need `sudo` and can run headlessly — no Terminal required.
+    private static func ensureDependenciesInstalled(onOutput: @escaping (String) -> Void) async {
+        guard let brew = WineSetupManager.brewPath else { return }
+        let requiredTools = [
+            (command: "cabextract", formula: "cabextract"),
+            (command: "7z", formula: "p7zip"),
+        ]
+        for tool in requiredTools {
+            let alreadyInstalled = ["/opt/homebrew/bin/\(tool.command)", "/usr/local/bin/\(tool.command)"]
+                .contains(where: { FileManager.default.isExecutableFile(atPath: $0) })
+            guard !alreadyInstalled else { continue }
+            onOutput("Installing \(tool.formula) (a tool winetricks needs to unpack its downloads)…")
+            try? await Shell.run(brew, arguments: ["install", tool.formula], onOutput: onOutput)
+        }
     }
 }
