@@ -17,6 +17,7 @@ struct ApplicationsTab: View {
     @State private var detectedCandidates: [ExeDiffScanner.Candidate] = []
     @State private var showingDetectedPicker = false
     @State private var pendingAppName = ""
+    @State private var pendingEnvOverrides: [String: String] = [:]
 
     @State private var appPendingUninstall: BottleApp?
     @State private var showingUninstallDialog = false
@@ -121,8 +122,8 @@ struct ApplicationsTab: View {
             )
         }
         .sheet(isPresented: $showingQuickInstall) {
-            QuickInstallSheet { downloadedURL, prerequisiteVerbs in
-                install(installerURL: downloadedURL, prerequisiteVerbs: prerequisiteVerbs)
+            QuickInstallSheet { downloadedURL, prerequisiteVerbs, envOverrides in
+                install(installerURL: downloadedURL, prerequisiteVerbs: prerequisiteVerbs, envOverrides: envOverrides)
             }
         }
         .sheet(isPresented: $showingLogSheet) {
@@ -212,12 +213,13 @@ struct ApplicationsTab: View {
         .card()
     }
 
-    private func install(installerURL: URL, prerequisiteVerbs: [String] = []) {
+    private func install(installerURL: URL, prerequisiteVerbs: [String] = [], envOverrides: [String: String] = [:]) {
         showingLogSheet = true
         errorMessage = nil
         isInstalling = true
         LogStore.shared.clear()
         pendingAppName = installerURL.deletingPathExtension().lastPathComponent.prettifiedAppName
+        pendingEnvOverrides = envOverrides
 
         Task {
             if !prerequisiteVerbs.isEmpty {
@@ -282,7 +284,9 @@ struct ApplicationsTab: View {
     private func openEditor(for executablePath: String, suggestedName: String, autoLaunch: Bool, note: String?) {
         editingAutoLaunch = autoLaunch
         editingDetectionNote = note
-        editingApp = BottleApp(name: suggestedName, executablePath: executablePath)
+        var app = BottleApp(name: suggestedName, executablePath: executablePath)
+        app.envOverrides = pendingEnvOverrides
+        editingApp = app
     }
 
     private func launch(_ app: BottleApp) {
