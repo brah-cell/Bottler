@@ -92,13 +92,15 @@ From a bottle's **Applications** tab:
 minutes on "Updating Steam…" — this is a known Wine quirk, not a Bottler
 bug. If it seems stuck for 5+ minutes, use **Kill Wine Processes** on the
 Overview tab and launch it again; the second attempt usually finishes
-quickly since the update partially completed already. Steam's newer UI
-also commonly shows a persistent **black window** under Wine — Bottler
-works around this automatically (for Steam installed via Quick Install)
-by disabling the specific component that causes it. If you installed
-Steam a different way and hit a black window, open its entry's **Edit…**
-sheet and add an environment override: key `WINEDLLOVERRIDES`, value
-`steamwebhelper.exe=` (nothing after the `=`), then relaunch.
+quickly since the update partially completed already. Steam's UI can also
+show a **black window**, or a **"steamwebhelper is not responding"**
+dialog — both come from Wine not supporting the sandboxing Steam's
+Chromium-based UI normally uses. Bottler works around this automatically
+for Steam installed via Quick Install, by launching it with Valve's own
+`-cef-disable-sandbox` flag (the same fix used on Linux/Proton for this
+exact issue). If you installed Steam a different way and hit this, open
+its entry's **Edit…** sheet and add `-cef-disable-sandbox` under **Extra
+Arguments**, then relaunch.
 
 If a step doesn't behave as described — the setup button seems to do
 nothing, or an error appears — check whether macOS is showing a permission

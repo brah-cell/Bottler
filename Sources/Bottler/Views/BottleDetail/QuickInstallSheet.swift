@@ -3,7 +3,7 @@ import AppKit
 
 struct QuickInstallSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let onDownloaded: (URL, [String], [String: String]) -> Void
+    let onDownloaded: (URL, [String], String) -> Void
 
     @State private var downloadingApp: String?
     @State private var errorMessage: String?
@@ -77,7 +77,7 @@ struct QuickInstallSheet: View {
                 ) { _ in }
                 downloadingApp = nil
                 dismiss()
-                onDownloaded(localURL, app.recommendedWinetricksVerbs, app.recommendedEnvOverrides)
+                onDownloaded(localURL, app.recommendedWinetricksVerbs, app.recommendedLaunchArguments)
             } catch {
                 downloadingApp = nil
                 errorMessage = "Couldn't download \(app.name) automatically. Opening its download page instead — install manually, then use \"Install Application\" in Bottler."

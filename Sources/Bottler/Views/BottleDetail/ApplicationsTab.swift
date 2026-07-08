@@ -17,7 +17,7 @@ struct ApplicationsTab: View {
     @State private var detectedCandidates: [ExeDiffScanner.Candidate] = []
     @State private var showingDetectedPicker = false
     @State private var pendingAppName = ""
-    @State private var pendingEnvOverrides: [String: String] = [:]
+    @State private var pendingLaunchArguments: String = ""
 
     @State private var appPendingUninstall: BottleApp?
     @State private var showingUninstallDialog = false
@@ -122,8 +122,8 @@ struct ApplicationsTab: View {
             )
         }
         .sheet(isPresented: $showingQuickInstall) {
-            QuickInstallSheet { downloadedURL, prerequisiteVerbs, envOverrides in
-                install(installerURL: downloadedURL, prerequisiteVerbs: prerequisiteVerbs, envOverrides: envOverrides)
+            QuickInstallSheet { downloadedURL, prerequisiteVerbs, launchArguments in
+                install(installerURL: downloadedURL, prerequisiteVerbs: prerequisiteVerbs, launchArguments: launchArguments)
             }
         }
         .sheet(isPresented: $showingLogSheet) {
@@ -213,13 +213,13 @@ struct ApplicationsTab: View {
         .card()
     }
 
-    private func install(installerURL: URL, prerequisiteVerbs: [String] = [], envOverrides: [String: String] = [:]) {
+    private func install(installerURL: URL, prerequisiteVerbs: [String] = [], launchArguments: String = "") {
         showingLogSheet = true
         errorMessage = nil
         isInstalling = true
         LogStore.shared.clear()
         pendingAppName = installerURL.deletingPathExtension().lastPathComponent.prettifiedAppName
-        pendingEnvOverrides = envOverrides
+        pendingLaunchArguments = launchArguments
 
         Task {
             if !prerequisiteVerbs.isEmpty {
@@ -285,7 +285,7 @@ struct ApplicationsTab: View {
         editingAutoLaunch = autoLaunch
         editingDetectionNote = note
         var app = BottleApp(name: suggestedName, executablePath: executablePath)
-        app.envOverrides = pendingEnvOverrides
+        app.arguments = pendingLaunchArguments
         editingApp = app
     }
 
