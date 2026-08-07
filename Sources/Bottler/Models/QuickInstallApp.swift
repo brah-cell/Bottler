@@ -24,6 +24,12 @@ struct QuickInstallApp: Identifiable, Hashable {
     /// work under Wine (e.g. a flag disabling a specific broken subsystem).
     /// Applied automatically to the app entry Bottler creates after install.
     let recommendedLaunchArguments: String
+    /// Extra arguments passed to the installer executable itself.
+    let recommendedInstallerArguments: [String]
+    /// Paths relative to each user's profile folder under drive_c/users
+    /// (e.g. "AppData/Local/SquirrelTemp") to delete before installing,
+    /// clearing stale state from a prior failed Squirrel/Electron attempt.
+    let preInstallCleanupRelativePaths: [String]
 }
 
 enum QuickInstallCatalog {
@@ -44,7 +50,9 @@ enum QuickInstallCatalog {
             // used on Linux/Proton for the same underlying reason). Trade-off:
             // it disables Chromium's sandboxing, which is an acceptable
             // security trade for a single-user Wine bottle.
-            recommendedLaunchArguments: "-cef-disable-sandbox"
+            recommendedLaunchArguments: "-cef-disable-sandbox -no-cef-sandbox",
+            recommendedInstallerArguments: [],
+            preInstallCleanupRelativePaths: []
         ),
         QuickInstallApp(
             name: "Discord",
@@ -52,9 +60,19 @@ enum QuickInstallCatalog {
             directDownloadURL: "https://discord.com/api/download?platform=win",
             installerFilename: "DiscordSetup.exe",
             fallbackPageURL: "https://discord.com/download",
-            notes: nil,
-            recommendedWinetricksVerbs: ["corefonts", "vcrun2019"],
-            recommendedLaunchArguments: ""
+            notes: "Discord already has a native Mac app — only install the Windows version if you specifically need it inside this bottle. Bottler clears stale Squirrel installer folders and installs .NET prerequisites automatically before running the installer.",
+            recommendedWinetricksVerbs: ["corefonts", "vcrun2019", "dotnet48"],
+            // Electron/Chromium sandbox flags for the installed client, not the
+            // Squirrel installer — same class of Wine incompatibility as Steam.
+            recommendedLaunchArguments: "--no-sandbox --disable-gpu",
+            recommendedInstallerArguments: [],
+            // Leftover SquirrelTemp/Discord folders from a failed attempt are
+            // the most common cause of Squirrel's generic "Installation has
+            // failed" dialog under Wine.
+            preInstallCleanupRelativePaths: [
+                "AppData/Local/SquirrelTemp",
+                "AppData/Local/Discord",
+            ]
         ),
         QuickInstallApp(
             name: "Epic Games Store",
@@ -64,7 +82,9 @@ enum QuickInstallCatalog {
             fallbackPageURL: "https://www.epicgames.com/store/download",
             notes: "Opens Epic's page — install the download through Bottler afterward.",
             recommendedWinetricksVerbs: ["corefonts", "vcrun2019", "d3dx9"],
-            recommendedLaunchArguments: ""
+            recommendedLaunchArguments: "",
+            recommendedInstallerArguments: [],
+            preInstallCleanupRelativePaths: []
         ),
         QuickInstallApp(
             name: "Battle.net",
@@ -74,7 +94,9 @@ enum QuickInstallCatalog {
             fallbackPageURL: "https://battle.net/download",
             notes: "Opens Blizzard's page — install the download through Bottler afterward.",
             recommendedWinetricksVerbs: ["corefonts", "vcrun2019", "d3dx9"],
-            recommendedLaunchArguments: ""
+            recommendedLaunchArguments: "",
+            recommendedInstallerArguments: [],
+            preInstallCleanupRelativePaths: []
         ),
         QuickInstallApp(
             name: "VLC Media Player",
@@ -84,7 +106,9 @@ enum QuickInstallCatalog {
             fallbackPageURL: "https://www.videolan.org/vlc/download-windows.html",
             notes: "Opens VideoLAN's page — install the download through Bottler afterward.",
             recommendedWinetricksVerbs: [],
-            recommendedLaunchArguments: ""
+            recommendedLaunchArguments: "",
+            recommendedInstallerArguments: [],
+            preInstallCleanupRelativePaths: []
         ),
         QuickInstallApp(
             name: "7-Zip",
@@ -94,7 +118,9 @@ enum QuickInstallCatalog {
             fallbackPageURL: "https://www.7-zip.org/download.html",
             notes: "Opens 7-Zip's page — install the download through Bottler afterward.",
             recommendedWinetricksVerbs: [],
-            recommendedLaunchArguments: ""
+            recommendedLaunchArguments: "",
+            recommendedInstallerArguments: [],
+            preInstallCleanupRelativePaths: []
         ),
         QuickInstallApp(
             name: "Notepad++",
@@ -104,7 +130,9 @@ enum QuickInstallCatalog {
             fallbackPageURL: "https://notepad-plus-plus.org/downloads/",
             notes: "Opens Notepad++'s page — install the download through Bottler afterward.",
             recommendedWinetricksVerbs: [],
-            recommendedLaunchArguments: ""
+            recommendedLaunchArguments: "",
+            recommendedInstallerArguments: [],
+            preInstallCleanupRelativePaths: []
         ),
     ]
 }

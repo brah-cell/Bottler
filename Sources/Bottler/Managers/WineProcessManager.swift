@@ -110,6 +110,9 @@ enum WineProcessManager {
     /// (env vars, virtual desktop, extra arguments).
     static func launch(app: BottleApp, in bottle: Bottle) throws {
         var env = baseEnvironment(for: bottle)
+        // Surface Wine warnings/errors in the log console when launching apps,
+        // unlike prefix-init helpers where WINEDEBUG=-all keeps output quiet.
+        env["WINEDEBUG"] = "warn+err"
         for (key, value) in app.envOverrides {
             env[key] = value
         }
@@ -122,6 +125,20 @@ enum WineProcessManager {
         }
         if !app.arguments.isEmpty {
             args.append(contentsOf: app.arguments.splitRespectingQuotes())
+        }
+
+        let commandLine = ([bottle.wineBinaryPath] + args)
+            .map { $0.contains(" ") ? "\"\($0)\"" : $0 }
+            .joined(separator: " ")
+        Task { @MainActor in
+            LogStore.shared.append("Launch command: \(commandLine)")
+            if !app.envOverrides.isEmpty {
+                let envSummary = app.envOverrides
+                    .sorted { $0.key < $1.key }
+                    .map { "\($0.key)=\($0.value)" }
+                    .joined(separator: ", ")
+                LogStore.shared.append("Environment overrides: \(envSummary)")
+            }
         }
 
         try Shell.launchDetached(bottle.wineBinaryPath, arguments: args, environment: env)

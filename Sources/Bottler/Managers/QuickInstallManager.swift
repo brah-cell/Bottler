@@ -32,6 +32,63 @@ enum QuickInstallManager {
         return destURL
     }
 
+    /// Deletes stale per-user folders (e.g. SquirrelTemp) left over from a
+    /// prior failed install attempt. Squirrel-based installers like Discord
+    /// commonly fail with a generic "Installation has failed" when these
+    /// directories contain corrupted partial state.
+    static func cleanupStaleInstallState(
+        relativePaths: [String],
+        in bottle: Bottle,
+        onOutput: @escaping (String) -> Void
+    ) {
+        let usersRoot = (bottle.driveCPath as NSString).appendingPathComponent("users")
+        guard FileManager.default.fileExists(atPath: usersRoot) else { return }
+
+        guard let userEntries = try? FileManager.default.contentsOfDirectory(atPath: usersRoot) else {
+            return
+        }
+
+        for userName in userEntries where userName != "Public" && !userName.hasPrefix(".") {
+            let profileRoot = (usersRoot as NSString).appendingPathComponent(userName)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: profileRoot, isDirectory: &isDirectory),
+                  isDirectory.boolValue else { continue }
+
+            for relativePath in relativePaths {
+                let target = (profileRoot as NSString).appendingPathComponent(relativePath)
+                guard FileManager.default.fileExists(atPath: target) else { continue }
+                onOutput("Removing stale \(relativePath) from a prior install attempt…")
+                try? FileManager.default.removeItem(atPath: target)
+            }
+        }
+    }
+
+    /// Reads Squirrel.Windows setup logs after a failed Discord (or other
+    /// Squirrel) install so the real error shows up in Bottler's log console
+    /// instead of only the installer's generic dialog.
+    static func readSquirrelInstallLog(in bottle: Bottle) -> String? {
+        let usersRoot = (bottle.driveCPath as NSString).appendingPathComponent("users")
+        guard let userEntries = try? FileManager.default.contentsOfDirectory(atPath: usersRoot) else {
+            return nil
+        }
+
+        let logNames = ["SquirrelSetup.log", "Squirrel-Install.log"]
+        for userName in userEntries where userName != "Public" && !userName.hasPrefix(".") {
+            let squirrelTemp = (usersRoot as NSString)
+                .appendingPathComponent(userName)
+                .appending("/AppData/Local/SquirrelTemp")
+            for logName in logNames {
+                let logPath = (squirrelTemp as NSString).appendingPathComponent(logName)
+                guard let content = try? String(contentsOfFile: logPath, encoding: .utf8),
+                      !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    continue
+                }
+                return content
+            }
+        }
+        return nil
+    }
+
     enum QuickInstallError: Error, LocalizedError {
         case invalidURL
         case downloadFailed

@@ -19,7 +19,13 @@ final class BottleManager: ObservableObject {
     }
 
     init() {
-        bottles = Persistence.loadBottles()
+        let loaded = Persistence.loadBottles()
+        if QuickInstallMigration.bottlesNeedMigration(loaded) {
+            bottles = loaded.map { QuickInstallMigration.migrate($0) }
+            Persistence.saveBottles(bottles)
+        } else {
+            bottles = loaded
+        }
         wineInstallations = WineDetector.detectInstallations()
         selectedBottleID = bottles.first?.id
     }

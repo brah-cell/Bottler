@@ -18,6 +18,7 @@ struct ApplicationsTab: View {
     @State private var showingDetectedPicker = false
     @State private var pendingAppName = ""
     @State private var pendingLaunchArguments: String = ""
+    @State private var pendingCatalogAppName: String?
 
     @State private var appPendingUninstall: BottleApp?
     @State private var showingUninstallDialog = false
@@ -122,8 +123,8 @@ struct ApplicationsTab: View {
             )
         }
         .sheet(isPresented: $showingQuickInstall) {
-            QuickInstallSheet { downloadedURL, prerequisiteVerbs, launchArguments in
-                install(installerURL: downloadedURL, prerequisiteVerbs: prerequisiteVerbs, launchArguments: launchArguments)
+            QuickInstallSheet { downloadedURL, catalogApp in
+                install(installerURL: downloadedURL, catalogApp: catalogApp)
             }
         }
         .sheet(isPresented: $showingLogSheet) {
@@ -213,15 +214,34 @@ struct ApplicationsTab: View {
         .card()
     }
 
-    private func install(installerURL: URL, prerequisiteVerbs: [String] = [], launchArguments: String = "") {
+    private func install(installerURL: URL, catalogApp: QuickInstallApp? = nil) {
         showingLogSheet = true
         errorMessage = nil
         isInstalling = true
         LogStore.shared.clear()
         pendingAppName = installerURL.deletingPathExtension().lastPathComponent.prettifiedAppName
-        pendingLaunchArguments = launchArguments
+        pendingLaunchArguments = catalogApp?.recommendedLaunchArguments ?? ""
+        pendingCatalogAppName = catalogApp?.name
+
+        let prerequisiteVerbs = catalogApp?.recommendedWinetricksVerbs ?? []
+        let cleanupPaths = catalogApp?.preInstallCleanupRelativePaths ?? []
+        let installerArguments = catalogApp?.recommendedInstallerArguments ?? []
 
         Task {
+            // Stale wineserver/wine processes can mask whether new launch args
+            // or env overrides actually took effect on the next run.
+            LogStore.shared.append("Stopping any running Wine processes for this bottle…")
+            try? await WineProcessManager.killProcesses(for: bottle)
+
+            if !cleanupPaths.isEmpty {
+                QuickInstallManager.cleanupStaleInstallState(
+                    relativePaths: cleanupPaths,
+                    in: bottle
+                ) { line in
+                    Task { @MainActor in LogStore.shared.append(line) }
+                }
+            }
+
             if !prerequisiteVerbs.isEmpty {
                 if let winetricksPath = bottleManager.wineInstallations
                     .first(where: { $0.binaryPath == bottle.wineBinaryPath })?.winetricksPath
@@ -248,14 +268,20 @@ struct ApplicationsTab: View {
 
             let before = ExeDiffScanner.snapshot(root: bottle.driveCPath)
             do {
-                try await WineProcessManager.runInstaller(installerURL.path, in: bottle) { line in
+                try await WineProcessManager.runInstaller(
+                    installerURL.path,
+                    in: bottle,
+                    extraArguments: installerArguments
+                ) { line in
                     Task { @MainActor in LogStore.shared.append(line) }
                 }
             } catch {
+                appendSquirrelLogIfAvailable(for: pendingCatalogAppName)
                 errorMessage = error.localizedDescription
                 isInstalling = false
                 return
             }
+            appendSquirrelLogIfAvailable(for: pendingCatalogAppName)
             let after = ExeDiffScanner.snapshot(root: bottle.driveCPath)
             let candidates = ExeDiffScanner.rankedNewCandidates(before: before, after: after)
             isInstalling = false
@@ -278,6 +304,21 @@ struct ApplicationsTab: View {
                 detectedCandidates = candidates
                 showingDetectedPicker = true
             }
+        }
+    }
+
+    /// After a Quick Install attempt (success or failure), checks for a
+    /// Squirrel setup log (Discord and other Squirrel-based installers)
+    /// and appends its real contents to the log console. Squirrel's own
+    /// dialog just says "Installation has failed" with no detail — this
+    /// surfaces the actual reason instead of leaving the person guessing.
+    private func appendSquirrelLogIfAvailable(for catalogAppName: String?) {
+        guard catalogAppName != nil else { return }
+        guard let log = QuickInstallManager.readSquirrelInstallLog(in: bottle) else { return }
+        Task { @MainActor in
+            LogStore.shared.append("---- Installer log ----")
+            LogStore.shared.append(log)
+            LogStore.shared.append("------------------------")
         }
     }
 

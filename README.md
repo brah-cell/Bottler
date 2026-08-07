@@ -97,10 +97,17 @@ show a **black window**, or a **"steamwebhelper is not responding"**
 dialog — both come from Wine not supporting the sandboxing Steam's
 Chromium-based UI normally uses. Bottler works around this automatically
 for Steam installed via Quick Install, by launching it with Valve's own
-`-cef-disable-sandbox` flag (the same fix used on Linux/Proton for this
-exact issue). If you installed Steam a different way and hit this, open
-its entry's **Edit…** sheet and add `-cef-disable-sandbox` under **Extra
-Arguments**, then relaunch.
+`-cef-disable-sandbox -no-cef-sandbox` flags (the same fix used on
+Linux/Proton for this exact issue). If you already had a Steam bottle from
+before this fix existed, Bottler automatically repairs it the next time
+you open the app — no manual editing needed.
+
+**Discord-specific tip:** if its installer shows a generic "Installation
+has failed" dialog, this is almost always leftover state from a prior
+failed attempt. Bottler clears that automatically before installing via
+Quick Install, and if it still fails, checks for Discord's own setup log
+and prints the real error into Bottler's Log console instead of leaving
+you with just the generic dialog.
 
 If a step doesn't behave as described — the setup button seems to do
 nothing, or an error appears — check whether macOS is showing a permission
