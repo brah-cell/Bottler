@@ -22,58 +22,24 @@ enum Shell {
     /// Runs an executable with arguments and environment, streaming each
     /// output line to `onOutput` as it's produced. Throws if the process
     /// exits non-zero.
+    ///
+    /// `workingDirectory` matters for Wine: many Windows programs load
+    /// files relative to the current directory, and an app launched from
+    /// Finder otherwise inherits `/` as its working directory.
     @discardableResult
     static func run(
         _ executablePath: String,
         arguments: [String],
         environment: [String: String] = [:],
+        workingDirectory: String? = nil,
         onOutput: @escaping (String) -> Void = { _ in }
     ) async throws -> Int32 {
         try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: executablePath)
-            process.arguments = arguments
-
-            var env = ProcessInfo.processInfo.environment
-            for (key, value) in environment {
-                env[key] = value
-            }
-            process.environment = env
-
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
-
-            func drain(_ pipe: Pipe) {
-                pipe.fileHandleForReading.readabilityHandler = { handle in
-                    let data = handle.availableData
-                    guard !data.isEmpty else { return }
-                    if let text = String(data: data, encoding: .utf8) {
-                        text.split(separator: "\n", omittingEmptySubsequences: true)
-                            .forEach { onOutput(String($0)) }
-                    }
-                }
-            }
-            drain(stdoutPipe)
-            drain(stderrPipe)
+            let process = makeProcess(executablePath, arguments, environment, workingDirectory)
+            let pipes = attachOutputPipes(to: process, onOutput: onOutput)
 
             process.terminationHandler = { proc in
-                // Stop future async callbacks first, then do one final
-                // synchronous read of anything still sitting in the pipe
-                // buffer — without this, the last chunk of output (e.g. a
-                // final "Done." line) can occasionally be dropped if the
-                // process exits before the readability handler fires for
-                // the last time.
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
-                for pipe in [stdoutPipe, stderrPipe] {
-                    let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
-                    if !remaining.isEmpty, let text = String(data: remaining, encoding: .utf8) {
-                        text.split(separator: "\n", omittingEmptySubsequences: true)
-                            .forEach { onOutput(String($0)) }
-                    }
-                }
+                finishDraining(pipes, onOutput: onOutput)
                 if proc.terminationStatus == 0 {
                     continuation.resume(returning: proc.terminationStatus)
                 } else {
@@ -91,17 +57,100 @@ enum Shell {
 
     /// Fire-and-forget launch (used for launching GUI apps like winecfg or
     /// an installed game, where we don't want to block waiting for exit).
+    /// Output is still streamed to `onOutput` and the exit status reported
+    /// to `onExit`, so a crash on startup shows up in the log console
+    /// instead of vanishing.
     static func launchDetached(
         _ executablePath: String,
         arguments: [String],
-        environment: [String: String] = [:]
+        environment: [String: String] = [:],
+        workingDirectory: String? = nil,
+        onOutput: ((String) -> Void)? = nil,
+        onExit: ((Int32) -> Void)? = nil
     ) throws {
+        let process = makeProcess(executablePath, arguments, environment, workingDirectory)
+        if let onOutput {
+            let pipes = attachOutputPipes(to: process, onOutput: onOutput)
+            process.terminationHandler = { proc in
+                finishDraining(pipes, onOutput: onOutput)
+                onExit?(proc.terminationStatus)
+            }
+        } else if let onExit {
+            process.terminationHandler = { proc in onExit(proc.terminationStatus) }
+        }
+        try process.run()
+    }
+
+    // MARK: - Helpers
+
+    private static func makeProcess(
+        _ executablePath: String,
+        _ arguments: [String],
+        _ environment: [String: String],
+        _ workingDirectory: String?
+    ) -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+
         var env = ProcessInfo.processInfo.environment
         for (key, value) in environment { env[key] = value }
         process.environment = env
-        try process.run()
+
+        if let workingDirectory, FileManager.default.fileExists(atPath: workingDirectory) {
+            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
+        }
+        return process
+    }
+
+    private static func attachOutputPipes(to process: Process, onOutput: @escaping (String) -> Void) -> [Pipe] {
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        for pipe in [stdoutPipe, stderrPipe] {
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                emitLines(data, onOutput: onOutput)
+            }
+        }
+        return [stdoutPipe, stderrPipe]
+    }
+
+    /// Stops the async readers, then grabs whatever is still buffered in
+    /// the pipes. This must NOT use `readDataToEndOfFile()`: Wine programs
+    /// often spawn children that inherit the pipe (e.g. an installer whose
+    /// last step launches the app it just installed), so end-of-file never
+    /// arrives and the read blocks until that child quits — which left the
+    /// install spinner stuck forever.
+    private static func finishDraining(_ pipes: [Pipe], onOutput: @escaping (String) -> Void) {
+        for pipe in pipes {
+            pipe.fileHandleForReading.readabilityHandler = nil
+            let remaining = readAvailableWithoutBlocking(pipe.fileHandleForReading)
+            if !remaining.isEmpty { emitLines(remaining, onOutput: onOutput) }
+        }
+    }
+
+    private static func readAvailableWithoutBlocking(_ handle: FileHandle) -> Data {
+        let fd = handle.fileDescriptor
+        let flags = fcntl(fd, F_GETFL)
+        guard flags >= 0 else { return Data() }
+        _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+
+        var result = Data()
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let count = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+            if count <= 0 { break }   // 0 = EOF, -1 = nothing more right now (EAGAIN)
+            result.append(contentsOf: buffer[0..<count])
+        }
+        return result
+    }
+
+    private static func emitLines(_ data: Data, onOutput: (String) -> Void) {
+        let text = String(decoding: data, as: UTF8.self)
+        text.split(whereSeparator: \.isNewline)
+            .forEach { onOutput(String($0)) }
     }
 }

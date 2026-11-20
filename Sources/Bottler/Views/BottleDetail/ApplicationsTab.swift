@@ -327,14 +327,20 @@ struct ApplicationsTab: View {
         editingDetectionNote = note
         var app = BottleApp(name: suggestedName, executablePath: executablePath)
         app.arguments = pendingLaunchArguments
+        if let launcher = ExeDiffScanner.squirrelLauncher(for: executablePath, extraAppArguments: pendingLaunchArguments) {
+            app.executablePath = launcher.executablePath
+            app.arguments = launcher.arguments
+        }
         editingApp = app
     }
 
     private func launch(_ app: BottleApp) {
+        errorMessage = nil
         do {
             try WineProcessManager.launch(app: app, in: bottle)
         } catch {
             errorMessage = error.localizedDescription
+            LogStore.shared.append("Couldn't launch \(app.name): \(error.localizedDescription)")
         }
     }
 
