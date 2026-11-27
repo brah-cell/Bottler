@@ -208,9 +208,14 @@ struct FilesTab: View {
     }
 
     private func launch(_ entry: FileEntry) {
-        let transientApp = BottleApp(name: entry.name, executablePath: entry.path)
+        // If this .exe is already a saved app, launch it with that app's
+        // settings (arguments, env overrides, virtual desktop). Otherwise
+        // still apply known-required flags: launching steam.exe from here
+        // without -no-cef-sandbox gives a permanently black window.
+        let app = bottle.apps.first(where: { $0.executablePath == entry.path })
+            ?? QuickInstallMigration.migrateApp(BottleApp(name: entry.name, executablePath: entry.path))
         do {
-            try WineProcessManager.launch(app: transientApp, in: bottle)
+            try WineProcessManager.launch(app: app, in: bottle)
         } catch {
             errorMessage = error.localizedDescription
         }
