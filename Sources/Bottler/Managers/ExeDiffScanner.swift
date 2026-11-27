@@ -13,10 +13,17 @@ enum ExeDiffScanner {
 
     /// Directories under drive_c that are never the "real" app (system
     /// noise, temp files, shared redistributables).
+    ///
+    /// Note: `/users/` as a whole is deliberately NOT ignored. Per-user
+    /// installers (Discord and most other Electron/Squirrel apps) install
+    /// into `users/<name>/AppData/Local`, and ignoring it meant the real
+    /// app was never detected.
     private static let ignoredPathFragments = [
         "/windows/",
         "/programdata/",
-        "/users/",
+        "/users/public/",
+        "/squirreltemp/",
+        "/appdata/local/temp/",
         "/temp/",
         "/tmp/",
         "/common files/",
@@ -52,6 +59,50 @@ enum ExeDiffScanner {
         let newPaths = Set(after.keys).subtracting(before.keys)
         return newPaths
             .map { Candidate(path: $0, fileSize: after[$0] ?? 0) }
-            .sorted { $0.fileSize > $1.fileSize }
+            .sorted { lhs, rhs in
+                let lhsHelper = isLikelyHelper(lhs.path)
+                let rhsHelper = isLikelyHelper(rhs.path)
+                if lhsHelper != rhsHelper { return !lhsHelper }
+                return lhs.fileSize > rhs.fileSize
+            }
+    }
+
+    /// Executables installers commonly drop next to the real app that are
+    /// never what the person wants to launch. They stay in the list (just
+    /// ranked last) in case the guess is wrong.
+    private static let helperNameFragments = [
+        "unins", "uninstall", "update", "updater", "setup", "crashpad",
+        "crashhandler", "crashreporter", "helper", "squirrel", "elevate",
+    ]
+
+    private static func isLikelyHelper(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent.lowercased()
+        return helperNameFragments.contains { name.contains($0) }
+    }
+
+    /// Squirrel.Windows apps (Discord, Slack, Teams, and others) install the
+    /// real program into a versioned folder like `Discord/app-1.0.9035/`
+    /// and delete that folder on their next update, so a saved path to
+    /// `app-1.0.9035/Discord.exe` stops existing. The stable entry point
+    /// is `Update.exe --processStart Discord.exe` one folder up.
+    ///
+    /// Returns the launcher path and argument string to use instead, or nil
+    /// if `path` isn't inside a Squirrel install. `extraAppArguments` are
+    /// forwarded to the real app via `--process-start-args`.
+    static func squirrelLauncher(for path: String, extraAppArguments: String) -> (executablePath: String, arguments: String)? {
+        let appFolder = (path as NSString).deletingLastPathComponent
+        guard (appFolder as NSString).lastPathComponent.lowercased().hasPrefix("app-") else { return nil }
+
+        let installRoot = (appFolder as NSString).deletingLastPathComponent
+        let updateExe = (installRoot as NSString).appendingPathComponent("Update.exe")
+        guard FileManager.default.fileExists(atPath: updateExe) else { return nil }
+
+        let exeName = (path as NSString).lastPathComponent
+        var arguments = "--processStart \"\(exeName)\""
+        let trimmed = extraAppArguments.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            arguments += " --process-start-args \"\(trimmed)\""
+        }
+        return (updateExe, arguments)
     }
 }

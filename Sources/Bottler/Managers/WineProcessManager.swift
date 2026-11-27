@@ -102,6 +102,7 @@ enum WineProcessManager {
             bottle.wineBinaryPath,
             arguments: args,
             environment: baseEnvironment(for: bottle),
+            workingDirectory: (installerPath as NSString).deletingLastPathComponent,
             onOutput: onOutput
         )
     }
@@ -110,9 +111,11 @@ enum WineProcessManager {
     /// (env vars, virtual desktop, extra arguments).
     static func launch(app: BottleApp, in bottle: Bottle) throws {
         var env = baseEnvironment(for: bottle)
-        // Surface Wine warnings/errors in the log console when launching apps,
-        // unlike prefix-init helpers where WINEDEBUG=-all keeps output quiet.
-        env["WINEDEBUG"] = "warn+err"
+        // Surface Wine's errors and warnings in the log console when launching
+        // apps (unlike prefix-init helpers, where WINEDEBUG=-all keeps output
+        // quiet). Only the very noisy "fixme" class is hidden. The previous
+        // value, "warn+err", wasn't valid WINEDEBUG syntax.
+        env["WINEDEBUG"] = "fixme-all"
         for (key, value) in app.envOverrides {
             env[key] = value
         }
@@ -141,7 +144,46 @@ enum WineProcessManager {
             }
         }
 
-        try Shell.launchDetached(bottle.wineBinaryPath, arguments: args, environment: env)
+        // Run from the program's own folder, the way Windows does when you
+        // double-click an .exe. Without this the app inherits Bottler's
+        // working directory (`/`), and any program that loads data files
+        // relative to the current directory fails on startup.
+        let appFolder = (app.executablePath as NSString).deletingLastPathComponent
+
+        guard FileManager.default.fileExists(atPath: app.executablePath) else {
+            throw LaunchError.executableMissing(app.executablePath)
+        }
+
+        let appName = app.name
+        try Shell.launchDetached(
+            bottle.wineBinaryPath,
+            arguments: args,
+            environment: env,
+            workingDirectory: appFolder,
+            onOutput: { line in
+                Task { @MainActor in LogStore.shared.append(line) }
+            },
+            onExit: { status in
+                Task { @MainActor in
+                    if status == 0 {
+                        LogStore.shared.append("\(appName) closed.")
+                    } else {
+                        LogStore.shared.append("\(appName) exited with error status \(status). The lines above usually explain why.")
+                    }
+                }
+            }
+        )
+    }
+
+    enum LaunchError: Error, LocalizedError {
+        case executableMissing(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .executableMissing(let path):
+                return "The program file no longer exists at \(path). It may have been moved by an update. Click Edit\u{2026} and choose its .exe again."
+            }
+        }
     }
 
     /// Kills all wine processes associated with a bottle via `wineserver -k`.

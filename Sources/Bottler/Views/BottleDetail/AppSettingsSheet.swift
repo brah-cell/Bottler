@@ -91,7 +91,11 @@ struct AppSettingsSheet: View {
                         bottleManager.updateApp(app, in: bottle)
                     }
                     if autoLaunchOnSave {
-                        try? WineProcessManager.launch(app: app, in: bottle)
+                        do {
+                            try WineProcessManager.launch(app: app, in: bottle)
+                        } catch {
+                            LogStore.shared.append("Couldn't launch \(app.name): \(error.localizedDescription)")
+                        }
                     }
                     dismiss()
                 }
