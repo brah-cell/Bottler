@@ -1,19 +1,27 @@
 name: Release
 
-# Push a tag like "v1.0.0" to trigger this. It builds Bottler.app on a real
-# macOS runner, zips it, and attaches it to a new GitHub Release — no local
-# build required.
+# Publishes a GitHub Release with Bottler.zip attached. Runs automatically:
+#
+# - On every push to main (e.g. merging a pull request). It reads the app
+#   version from build_app.sh (CFBundleShortVersionString) and releases it
+#   as tag "v<version>", but only if that tag doesn't exist yet. So bumping
+#   the version in build_app.sh is all it takes to ship a new release;
+#   merges that don't change the version are skipped.
+# - When a tag like "v1.0.0" is pushed by hand.
+# - Manually, from the Actions tab ("Run workflow").
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Tag to release (e.g. v1.0.0) — only used for manual runs"
-        required: true
-        default: "v1.0.0"
+        description: "Tag to release (e.g. v1.0.0). Leave empty to use the version in build_app.sh."
+        required: false
+        default: ""
 
 jobs:
   build-and-release:
@@ -24,31 +32,53 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need existing tags to tell whether this version was already released
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          VERSION=$(grep -A1 'CFBundleShortVersionString' build_app.sh | grep -o '[0-9][0-9.]*' | head -n1)
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          # On a push to main, skip versions that already have a tag, so
+          # ordinary merges don't overwrite a published release.
+          if [ "${{ github.ref_type }}" = "branch" ] && [ "${{ github.event_name }}" = "push" ] \
+             && git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "${TAG} is already released. Bump the version in build_app.sh to publish a new one."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Releasing ${TAG}"
+          fi
 
       - name: Show Swift version
+        if: steps.tag.outputs.skip == 'false'
         run: swift --version
 
       - name: Build Bottler.app
+        if: steps.tag.outputs.skip == 'false'
         run: |
           chmod +x build_app.sh
           ./build_app.sh
 
       - name: Zip app bundle (preserving bundle structure/attributes)
+        if: steps.tag.outputs.skip == 'false'
         run: ditto -c -k --keepParent Bottler.app Bottler.zip
 
-      - name: Determine release tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Create GitHub Release
+        if: steps.tag.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: "Bottler ${{ steps.tag.outputs.tag }}"
           files: Bottler.zip
           generate_release_notes: true
